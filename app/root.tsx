@@ -20,6 +20,10 @@ import { PageLayout } from './components/PageLayout';
 
 export type RootLoader = typeof loader;
 
+export const config = {
+  runtime: 'nodejs',
+} as const;
+
 /**
  * This is important to avoid re-fetching root queries on sub-navigations
  */
