@@ -4,8 +4,15 @@ import {oxygen} from '@shopify/mini-oxygen/vite';
 import {reactRouter} from '@react-router/dev/vite';
 import tailwindcss from '@tailwindcss/vite';
 
-export default defineConfig({
-  plugins: [tailwindcss(), hydrogen(), oxygen(), reactRouter()],
+const isVercelBuild = Boolean(process.env.VERCEL);
+
+export default defineConfig(({isSsrBuild}) => ({
+  plugins: [
+    tailwindcss(),
+    hydrogen(),
+    !isVercelBuild && oxygen(),
+    reactRouter(),
+  ],
   resolve: {
     tsconfigPaths: true,
   },
@@ -13,6 +20,11 @@ export default defineConfig({
     // Allow a strict Content-Security-Policy
     // without inlining assets as base64:
     assetsInlineLimit: 0,
+    rollupOptions: isVercelBuild && isSsrBuild
+      ? {
+          input: './server/app.ts',
+        }
+      : undefined,
   },
   ssr: {
     optimizeDeps: {
@@ -36,4 +48,4 @@ export default defineConfig({
   server: {
     allowedHosts: ['.tryhydrogen.dev'],
   },
-});
+}));

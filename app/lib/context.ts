@@ -1,4 +1,4 @@
-import {createHydrogenContext} from '@shopify/hydrogen';
+import {InMemoryCache, createHydrogenContext} from '@shopify/hydrogen';
 import {AppSession} from '~/lib/session';
 import {CART_QUERY_FRAGMENT} from '~/lib/fragments';
 import type {CartApiQueryFragment} from 'storefrontapi.generated';
@@ -31,7 +31,7 @@ declare global {
 export async function createHydrogenRouterContext(
   request: Request,
   env: Env,
-  executionContext: ExecutionContext,
+  executionContext?: ExecutionContext,
 ) {
   /**
    * Open a cache instance in the worker and a custom session instance.
@@ -40,9 +40,15 @@ export async function createHydrogenRouterContext(
     throw new Error('SESSION_SECRET environment variable is not set');
   }
 
-  const waitUntil = executionContext.waitUntil.bind(executionContext);
+  const waitUntil =
+    executionContext?.waitUntil.bind(executionContext) ??
+    ((promise: Promise<unknown>) => {
+      promise.catch((error) => console.error(error));
+    });
   const [cache, session] = await Promise.all([
-    caches.open('hydrogen'),
+    typeof caches !== 'undefined'
+      ? caches.open('hydrogen')
+      : Promise.resolve(new InMemoryCache()),
     AppSession.init(request, [env.SESSION_SECRET]),
   ]);
 

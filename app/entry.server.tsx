@@ -5,19 +5,24 @@ import {
   createContentSecurityPolicy,
   type HydrogenRouterContextProvider,
 } from '@shopify/hydrogen';
-import type {EntryContext} from 'react-router';
+import type {AppLoadContext, EntryContext} from 'react-router';
 
 export default async function handleRequest(
   request: Request,
   responseStatusCode: number,
   responseHeaders: Headers,
   reactRouterContext: EntryContext,
-  context: HydrogenRouterContextProvider,
+  loadContext?: AppLoadContext,
 ) {
+  const context = loadContext as unknown as
+    | HydrogenRouterContextProvider
+    | undefined;
+  const env = context?.env ?? process.env;
+
   const {nonce, header, NonceProvider} = createContentSecurityPolicy({
     shop: {
-      checkoutDomain: context.env.PUBLIC_CHECKOUT_DOMAIN,
-      storeDomain: context.env.PUBLIC_STORE_DOMAIN,
+      checkoutDomain: env.PUBLIC_CHECKOUT_DOMAIN ?? '',
+      storeDomain: env.PUBLIC_STORE_DOMAIN ?? '',
     },
   });
 

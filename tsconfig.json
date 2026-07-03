@@ -4,6 +4,7 @@
     "app/**/*.ts",
     "app/**/*.tsx",
     "app/**/*.d.ts",
+    "server/**/*.ts",
     "*.ts",
     "*.tsx",
     "*.d.ts",
