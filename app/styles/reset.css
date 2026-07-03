@@ -15,12 +15,6 @@ body {
   padding: 0;
 }
 
-h1,
-h2,
-p {
-  margin: 0;
-  padding: 0;
-}
 
 h1 {
   font-size: 1.6rem;
@@ -30,12 +24,6 @@ h1 {
   margin-top: 2rem;
 }
 
-h2 {
-  font-size: 1.2rem;
-  font-weight: 700;
-  line-height: 1.4;
-  margin-bottom: 1rem;
-}
 
 h4 {
   margin-top: 0.5rem;
@@ -45,21 +33,6 @@ h4 {
 h5 {
   margin-bottom: 1rem;
   margin-top: 0.5rem;
-}
-
-p {
-  font-size: 1rem;
-  line-height: 1.4;
-}
-
-a {
-  color: #000;
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-  cursor: pointer;
 }
 
 hr {
@@ -78,7 +51,7 @@ body {
   min-height: 100vh;
 }
 
-body > main {
+/* body > main {
   margin: 0 1rem 1rem 1rem;
 }
 
@@ -87,7 +60,7 @@ section {
   @media (min-width: 768px) {
     padding: 2rem 0;
   }
-}
+} */
 
 fieldset {
   display: flex;
@@ -104,12 +77,12 @@ form {
 }
 
 input {
-  border-radius: 4px;
+  /* border-radius: 4px;
   border: 1px solid #000;
   font-size: 1rem;
   margin-bottom: 0.5rem;
   margin-top: 0.25rem;
-  padding: 0.5rem;
+  padding: 0.5rem; */
 }
 
 legend {

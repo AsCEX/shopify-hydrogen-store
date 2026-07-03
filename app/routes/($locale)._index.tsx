@@ -1,176 +1,365 @@
-import {Await, useLoaderData, Link} from 'react-router';
+import {Link} from 'react-router';
 import type {Route} from './+types/_index';
-import {Suspense} from 'react';
-import {Image} from '@shopify/hydrogen';
-import type {
-  FeaturedCollectionFragment,
-  RecommendedProductsQuery,
-} from 'storefrontapi.generated';
-import {ProductItem} from '~/components/ProductItem';
-import {MockShopNotice} from '~/components/MockShopNotice';
+import type {MouseEvent, PointerEvent} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 
-export const meta: Route.MetaFunction = () => {
-  return [{title: 'Hydrogen | Home'}];
-};
+import {HeroSlider} from '~/components/HeroSlider';
+import {getHeroSlides} from '~/lib/hero-slides.server';
 
-export async function loader(args: Route.LoaderArgs) {
-  // Start fetching non-critical data without blocking time to first byte
-  const deferredData = loadDeferredData(args);
+export async function loader({context}: Route.LoaderArgs) {
+  const {storefront} = context;
 
-  // Await the critical data required to render initial state of the page
-  const criticalData = await loadCriticalData(args);
+  const [heroSlides, collectionData] = await Promise.all([
+    getHeroSlides(storefront),
 
-  return {...deferredData, ...criticalData};
-}
+    storefront.query(COLLECTIONS_QUERY, {
+      variables: {
+        first: 8,
+      },
+    }),
 
-/**
- * Load data necessary for rendering content above the fold. This is the critical data
- * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
- */
-async function loadCriticalData({context}: Route.LoaderArgs) {
-  const [{collections}] = await Promise.all([
-    context.storefront.query(FEATURED_COLLECTION_QUERY),
-    // Add other queries here, so that they are loaded in parallel
+
   ]);
 
+  
   return {
-    isShopLinked: Boolean(context.env.PUBLIC_STORE_DOMAIN),
-    featuredCollection: collections.nodes[0],
+    heroSlides,
+    allproducts: collectionData.allCollections.nodes,
+    collections: collectionData.productCollections.nodes,
   };
 }
 
-/**
- * Load data for rendering content below the fold. This data is deferred and will be
- * fetched after the initial page load. If it's unavailable, the page should still 200.
- * Make sure to not throw any errors here, as it will cause the page to 500.
- */
-function loadDeferredData({context}: Route.LoaderArgs) {
-  const recommendedProducts = context.storefront
-    .query(RECOMMENDED_PRODUCTS_QUERY)
-    .catch((error: Error) => {
-      // Log query errors, but don't throw them so the page can still render
-      console.error(error);
-      return null;
+export default function Homepage({loaderData}: Route.ComponentProps) {
+  const {heroSlides, allproducts, collections} = loaderData;
+  const tabs = useMemo(
+    () => [
+      {
+        handle: 'all',
+        title: 'All',
+        products: allproducts,
+      },
+      ...collections.map((collection: any) => ({
+        handle: collection.handle,
+        title: collection.title,
+        products: collection.products?.nodes ?? [],
+      })),
+    ],
+    [allproducts, collections],
+  );
+  const [activeTabIndex, setActiveTabIndex] = useState(0);
+  const [dragOffset, setDragOffset] = useState(0);
+  const swipeStartRef = useRef<{id: number; x: number; y: number} | null>(
+    null,
+  );
+  const tabButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const didSwipeRef = useRef(false);
+  const activeTab = tabs[activeTabIndex] ?? tabs[0];
+
+  useEffect(() => {
+    tabButtonRefs.current[activeTabIndex]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center',
     });
+  }, [activeTabIndex]);
 
-  return {
-    recommendedProducts,
+  const selectTab = (nextIndex: number) => {
+    const boundedIndex = Math.min(Math.max(nextIndex, 0), tabs.length - 1);
+    setActiveTabIndex(boundedIndex);
+    setDragOffset(0);
   };
-}
 
-export default function Homepage() {
-  const data = useLoaderData<typeof loader>();
-  return (
-    <div className="home">
-      {data.isShopLinked ? null : <MockShopNotice />}
-      <FeaturedCollection collection={data.featuredCollection} />
-      <RecommendedProducts products={data.recommendedProducts} />
-    </div>
-  );
-}
+  const handleSwipeStart = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
 
-function FeaturedCollection({
-  collection,
-}: {
-  collection: FeaturedCollectionFragment;
-}) {
-  if (!collection) return null;
-  const image = collection?.image;
+    if ((event.target as Element).closest('[data-tab-swipe-exclude]')) {
+      return;
+    }
+
+    swipeStartRef.current = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    didSwipeRef.current = false;
+    setDragOffset(0);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleSwipeMove = (event: PointerEvent<HTMLDivElement>) => {
+    const swipeStart = swipeStartRef.current;
+
+    if (!swipeStart || swipeStart.id !== event.pointerId) return;
+
+    const deltaX = event.clientX - swipeStart.x;
+    const deltaY = event.clientY - swipeStart.y;
+
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 8) {
+      didSwipeRef.current = true;
+      setDragOffset(deltaX);
+    }
+  };
+
+  const handleSwipeEnd = (event: PointerEvent<HTMLDivElement>) => {
+    const swipeStart = swipeStartRef.current;
+
+    if (!swipeStart || swipeStart.id !== event.pointerId) return;
+
+    const deltaX = event.clientX - swipeStart.x;
+    const deltaY = event.clientY - swipeStart.y;
+    const shouldChangeTab =
+      Math.abs(deltaX) > 60 && Math.abs(deltaX) > Math.abs(deltaY);
+
+    swipeStartRef.current = null;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (shouldChangeTab) {
+      selectTab(activeTabIndex + (deltaX < 0 ? 1 : -1));
+    } else {
+      setDragOffset(0);
+    }
+  };
+
+  const handleSwipeCancel = (event: PointerEvent<HTMLDivElement>) => {
+    if (
+      swipeStartRef.current?.id === event.pointerId &&
+      event.currentTarget.hasPointerCapture(event.pointerId)
+    ) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    swipeStartRef.current = null;
+    setDragOffset(0);
+  };
+
+  const handlePanelClickCapture = (event: MouseEvent<HTMLDivElement>) => {
+    if (!didSwipeRef.current) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    didSwipeRef.current = false;
+  };
+
   return (
-    <Link
-      className="featured-collection"
-      to={`/collections/${collection.handle}`}
-    >
-      {image && (
-        <div className="featured-collection-image">
-          <Image
-            data={image}
-            sizes="100vw"
-            alt={image.altText || collection.title}
-          />
+    <>
+      <div className="flex h-[calc(100dvh-var(--footer-nav-height)-72px)] flex-col overflow-hidden">
+        <section className="px-2">
+          <div
+            role="tablist"
+            aria-label="Product collections"
+            className="flex gap-2 max-w-full overflow-x-auto px-2 scrollbar-none"
+          >
+            <button
+              type="button"
+              role="tab"
+              ref={(node) => {
+                tabButtonRefs.current[0] = node;
+              }}
+              aria-selected={activeTabIndex === 0}
+              onClick={() => selectTab(0)}
+              className={`group flex shrink-0 flex-col items-center justify-center break-inside-avoid border-0 bg-transparent p-1 py-2 ${
+                activeTabIndex === 0
+                  ? 'text-[var(--color-primary)]'
+                  : 'text-gray-500'
+              }`}
+            >
+              <h2 className="px-2 font-medium text-xs">All</h2>
+            </button>
+
+            {collections.map((collection: any, index: number) => {
+              const tabIndex = index + 1;
+
+              return (
+                <button
+                  type="button"
+                  role="tab"
+                  ref={(node) => {
+                    tabButtonRefs.current[tabIndex] = node;
+                  }}
+                  aria-selected={activeTabIndex === tabIndex}
+                  key={collection.id}
+                  onClick={() => selectTab(tabIndex)}
+                  className={`group flex shrink-0 flex-col items-center justify-center break-inside-avoid border-0 bg-transparent p-1 ${
+                    activeTabIndex === tabIndex
+                      ? 'text-[var(--color-primary)]'
+                      : 'text-gray-500'
+                  }`}
+                >
+                  <h2 className="px-2 font-medium text-xs">
+                    {collection.title}
+                  </h2>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <div
+          role="tabpanel"
+          aria-label={activeTab.title}
+          className="content all min-h-0 grow overflow-hidden touch-pan-y"
+          onPointerDownCapture={handleSwipeStart}
+          onPointerMove={handleSwipeMove}
+          onPointerUp={handleSwipeEnd}
+          onPointerCancel={handleSwipeCancel}
+          onClickCapture={handlePanelClickCapture}
+          onDragStart={(e) => e.preventDefault()}
+        >
+          <div
+            className="flex h-full"
+            style={{
+              transform: `translate3d(calc(${-activeTabIndex * 100}% + ${dragOffset}px), 0, 0)`,
+              transition: dragOffset
+                ? 'none'
+                : 'transform 320ms cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
+          >
+            {tabs.map((tab, tabIndex) => (
+              <div
+                key={tab.handle}
+                className="h-full w-full flex-none touch-pan-y overflow-y-auto"
+              >
+                <HeroSlider slides={heroSlides} />
+
+                <section className="!p-2 bg-gray-100">
+
+                  <div className="columns-2 gap-1">
+                    {tab.products.map((product: any, index: number) => {
+                      const image = product.media?.nodes[0]?.image;
+                      const price = product.priceRange.minVariantPrice;
+                      const imageAspectClass =
+                        index % 5 === 0 || index % 5 === 3
+                          ? 'aspect-[3/4]'
+                          : 'aspect-square';
+
+                      return (
+                        <Link
+                          key={product.id}
+                          to={`/products/${product.handle}`}
+                          className="group mb-2 block touch-pan-y break-inside-avoid bg-white p-1 py-2"
+                        >
+                          <div className="overflow-hidden rounded-xl bg-gray-100">
+                            {image ? (
+                              <img
+                                src={image.url}
+                                alt={image.altText ?? product.title}
+                                width={image.width ?? 800}
+                                height={image.height ?? 800}
+                                draggable={false}
+                                className={`${imageAspectClass} w-full object-cover transition duration-300 group-hover:scale-105`}
+                              />
+                            ) : (
+                              <div className={imageAspectClass} />
+                            )}
+                          </div>
+
+                          <h2 className="mt-2 px-2 font-medium text-xs">
+                            {product.title}
+                          </h2>
+
+                          <p className="mt-1 px-2 text-sm font-bold text-[var(--color-primary)]">
+                            {new Intl.NumberFormat('en-PH', {
+                              style: 'currency',
+                              currency: 'USD',
+                            }).format(Number(price.amount))}
+                          </p>
+                        </Link>
+                      );
+                    })}
+                  </div>
+
+                  {tab.products.length === 0 && (
+                    <p className="px-1 py-6 text-sm text-gray-500">
+                      No products found in this collection.
+                    </p>
+                  )}
+                </section>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
-      <h1>{collection.title}</h1>
-    </Link>
+
+      </div>
+    </>
   );
 }
 
-function RecommendedProducts({
-  products,
-}: {
-  products: Promise<RecommendedProductsQuery | null>;
-}) {
-  return (
-    <section
-      className="recommended-products"
-      aria-labelledby="recommended-products"
-    >
-      <h2 id="recommended-products">Recommended Products</h2>
-      <Suspense fallback={<div>Loading...</div>}>
-        <Await resolve={products}>
-          {(response) => (
-            <div className="recommended-products-grid">
-              {response
-                ? response.products.nodes.map((product) => (
-                    <ProductItem key={product.id} product={product} />
-                  ))
-                : null}
-            </div>
-          )}
-        </Await>
-      </Suspense>
-      <br />
-    </section>
-  );
-}
-
-const FEATURED_COLLECTION_QUERY = `#graphql
-  fragment FeaturedCollection on Collection {
-    id
-    title
-    image {
-      id
-      url
-      altText
-      width
-      height
-    }
-    handle
-  }
-  query FeaturedCollection($country: CountryCode, $language: LanguageCode)
-    @inContext(country: $country, language: $language) {
-    collections(first: 1, sortKey: UPDATED_AT, reverse: true) {
+const COLLECTIONS_QUERY = `#graphql
+  query Collections {
+    allCollections: products(first: 20) {
       nodes {
-        ...FeaturedCollection
+        id
+        handle
+        title
+        description
+        priceRange {
+          minVariantPrice {
+            amount
+            currencyCode
+          }
+        }
+        media(first: 1) {
+          nodes {
+            ... on MediaImage {
+              id
+              image {
+                url
+                altText
+                width
+                height
+              }
+            }
+          }
+        }
+          
+
       }
     }
-  }
-` as const;
 
-const RECOMMENDED_PRODUCTS_QUERY = `#graphql
-  fragment RecommendedProduct on Product {
-    id
-    title
-    handle
-    priceRange {
-      minVariantPrice {
-        amount
-        currencyCode
-      }
-    }
-    featuredImage {
-      id
-      url
-      altText
-      width
-      height
-    }
-  }
-  query RecommendedProducts ($country: CountryCode, $language: LanguageCode)
-    @inContext(country: $country, language: $language) {
-    products(first: 4, sortKey: UPDATED_AT, reverse: true) {
+    productCollections: collections(first: 20) {
       nodes {
-        ...RecommendedProduct
+        id
+        handle
+        title
+        description
+        image {
+          url
+          altText
+          width
+          height
+        }
+        products(first: 20) {
+          nodes {
+            id
+            handle
+            title
+            description
+            priceRange {
+              minVariantPrice {
+                amount
+                currencyCode
+              }
+            }
+            media(first: 1) {
+              nodes {
+                ... on MediaImage {
+                  id
+                  image {
+                    url
+                    altText
+                    width
+                    height
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

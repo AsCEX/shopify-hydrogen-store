@@ -14,13 +14,7 @@ import {ProductForm} from '~/components/ProductForm';
 import {redirectIfHandleIsLocalized} from '~/lib/redirect';
 
 export const meta: Route.MetaFunction = ({data}) => {
-  return [
-    {title: `Hydrogen | ${data?.product.title ?? ''}`},
-    {
-      rel: 'canonical',
-      href: `/products/${data?.product.handle}`,
-    },
-  ];
+  return [{title: `Hydrogen | ${data?.product.title ?? ''}`}];
 };
 
 export async function loader(args: Route.LoaderArgs) {
@@ -98,9 +92,9 @@ export default function Product() {
   const {title, descriptionHtml} = product;
 
   return (
-    <div className="product">
+    <div className="product p-2">
       <ProductImage image={selectedVariant?.image} />
-      <div className="product-main">
+      <div className="product-main p-2">
         <h1>{title}</h1>
         <ProductPrice
           price={selectedVariant?.price}
